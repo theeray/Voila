@@ -7,10 +7,12 @@ OCR sheet music reader and transposer specifically designed for converting tunes
 - Import uncompressed MusicXML (`.musicxml`, `.xml`) or compressed MusicXML (`.mxl`), including PlayScore exports.
 - Select a source part, switch between treble and alto clefs without changing pitch, shift octaves, and transpose by semitones.
 - Display engraved notation and edit source notes, rests, accidentals, octaves, and durations with undo/redo.
-- Generate editable MusicXML arrangements with diatonic thirds/sixths, tonic/fifth drones, and editable chord-symbol suggestions in major, natural minor, Dorian, or Mixolydian.
-- Audition parts with synthesized audio, a tempo control, and a mixer.
-- Export arrangement, melody, or corrected source as MusicXML; print the visible score or save it as a PDF.
-- Experimental in-browser scan of a photo or individual PDF page using Oemer's pretrained notehead segmentation model and custom staff/pitch/rhythm analysis.
+- Generate editable MusicXML arrangements with chord-aware smooth harmony or diatonic thirds/sixths. Harmony stays below the melody and within viola range, using rests when no suitable note fits.
+- Suggest guitar chords across a whole phrase, using meter, melodic fit, common tones, and cadences. Supports major, natural minor, Dorian, Mixolydian, and editable slash chords. Imported chord changes are preserved unless a measure is explicitly replaced.
+- Choose fixed tonic/fifth drones or adaptive drones that avoid prominent semitone/tritone clashes and incompatible chords. Drones use tied beat groups and sustain across ordinary barlines.
+- Audition parts with on-device PCM media audio, a tempo control, and a mixer. Chord previews use guitar-range voicings with slash basses; tied notes sustain. The media playback route improves phone compatibility.
+- Export arrangement, melody, or corrected source as MusicXML. Landscape Letter printing uses an independent layout with up to four measures per system and line endings at major repeats/section boundaries. Screen zoom is independent of print scale.
+- Experimental in-browser scan of a photo or individual PDF page using Oemer's pretrained notehead segmentation model and custom staff/pitch/rhythm analysis. Preprocessing balances lighting and corrects slight tilt (about ±4°). Ambiguous noteheads and inconsistent measure lengths are flagged for review.
 
 ## Scanning limits
 
@@ -18,7 +20,7 @@ This is a reviewable draft scanner, **not PlayScore-level OMR**. Use clear, stra
 
 PDF pages are handled individually. Handwriting and full piano/orchestral recognition are not supported. The 38 MB model loads on first scan; mobile memory and speed vary.
 
-Harmony is a simple diatonic starting point, not an orchestration engine. Choose the correct tonal center/mode, audition, and edit the exported parts in MuseScore if desired. Playback follows basic repeats; complex endings and D.C./D.S. are not implemented. Transposing-instrument sources and multistaff parts require extra checking.
+Accompaniment uses musical heuristics rather than a trained orchestration model. Suggestions are one chord per measure; imported multiple chord changes are retained. Adaptive drones are conservative and may rest for a whole measure. Fixed third/sixth harmony does not resolve every chromatic or contrapuntal case. Choose the correct tonal center/mode, audition, and edit the exported parts in MuseScore if desired. Playback follows basic two-pass repeats and standard first/second ending spans; nested repeats, custom repeat counts, and D.C./D.S. are not implemented. Transposing-instrument sources and multistaff parts require extra checking.
 
 Music is processed on the user's device. No API key, paid recognition service, or server upload is required. Download scores before closing the page: there is no automatic score persistence.
 
@@ -34,6 +36,7 @@ npm run dev
 The `predev` / `prebuild` script downloads the official Oemer model and verifies its SHA-256. It stores two local asset chunks to stay within static hosting per-file limits. Model binaries are not committed.
 
 ```sh
+npm test
 npm run build
 ```
 
@@ -48,3 +51,7 @@ Deploy the `dist` folder to static hosting. For a subdirectory (such as GitHub P
 - fflate — compressed MusicXML import.
 
 Voilà! is independent of PlayScore and MuseScore. Their proprietary recognition technology is not included.
+
+## Validation
+
+`npm test` covers exact pitch transposition, modal chord choices, preservation of imported chord changes, slash basses, harmony range and chord tones, drone rhythm/ties/clashes, repeat ending spans, PCM audio, print line breaks, and image preprocessing. OCR recognition still needs validation against a broad real-world sheet-music set; the included checks are not an accuracy benchmark.
