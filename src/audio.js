@@ -18,7 +18,7 @@ export function playbackEvents(doc,tempo,volumes,chords,repeat=true){
   for(const mi of order){markers.push({time:duration,index:mi});duration+=mel[mi].duration*beat;}
   if(duration>600)throw Error('Please use a selection of ten minutes or less for the audio preview.');
   for(const part of ps){
-    const ms=measures(doc,part.id),volume=part.id===ps[0].id?volumes.melody:part.name.toLowerCase().includes('drone')?volumes.drone:volumes.harmony;
+    const ms=measures(doc,part.id),volume=part.id===ps[0].id?volumes.melody:part.name.toLowerCase().includes('drone')?volumes.drone:part.name.toLowerCase().includes('fiddle')?(volumes.fiddle??volumes.harmony):volumes.harmony;
     let offset=0;const tied=new Map();
     for(const mi of order){
       for(const note of ms[mi]?.notes||[]){
@@ -35,7 +35,7 @@ export function playbackEvents(doc,tempo,volumes,chords,repeat=true){
   let offset=0,previousVoicing=[];
   for(const mi of order){
     const symbols=harmonyEvents(mel[mi]);
-    const changes=symbols.length?symbols:[{start:0,name:chords[mi]||''}];
+    const changes=Array.isArray(chords[mi])?chords[mi]:symbols.length?symbols:[{start:0,name:chords[mi]||''}];
     for(let i=0;i<changes.length;i++){
       const chord=parseChord(changes[i].name||'');if(!chord||!volumes.chords)continue;
       const start=changes[i].start*beat,end=Math.min(mel[mi].duration,changes[i+1]?.start??mel[mi].duration)*beat;

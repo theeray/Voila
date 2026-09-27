@@ -47,17 +47,26 @@ export function harmonyEvents(measure){
     if(child.tagName==='backup')at-=Number(txt(child,'duration',0))/measure.divisions;
     if(child.tagName==='forward')at+=Number(txt(child,'duration',0))/measure.divisions;
     if(child.tagName==='note'&&!direct(child,'chord').length&&!direct(child,'grace').length)at+=Number(txt(child,'duration',0))/measure.divisions;
-    if(child.tagName==='harmony')result.push({start:Math.max(0,at+Number(txt(child,'offset',0))/measure.divisions),name:chordName(child)});
+    if(child.tagName==='harmony')result.push({start:Math.max(0,at+Number(txt(child,'offset',0))/measure.divisions),name:chordName(child),el:child});
   }
   return result.sort((a,b)=>a.start-b.start);
 }
-export function addChord(m,name){
+export function addChord(m,name,start=0,divisions=1){
   const c=parseChord(name);if(!c)return;
   const d=m.ownerDocument,h=elem(d,'harmony'),r=elem(d,'root');r.append(elem(d,'root-step',c.step));if(c.alter)r.append(elem(d,'root-alter',c.alter));h.append(r,elem(d,'kind',c.kind));
   if(c.bass){const bass=elem(d,'bass');bass.append(elem(d,'bass-step',c.bass.step));if(c.bass.alter)bass.append(elem(d,'bass-alter',c.bass.alter));h.append(bass);}
-  m.insertBefore(h,direct(m,'note')[0]||null);
+  // Place harmony at its real cursor position; several renderers ignore offsets.
+  let at=0,anchor=null;
+  for(const child of m.children){
+    if(child.tagName==='backup')at-=Number(txt(child,'duration',0))/divisions;
+    if(child.tagName==='forward')at+=Number(txt(child,'duration',0))/divisions;
+    if(child.tagName==='note'&&!direct(child,'chord').length&&!direct(child,'grace').length){if(Math.abs(at-start)<.00001){anchor=child;break;}at+=Number(txt(child,'duration',0))/divisions;}
+  }
+  if(anchor)m.insertBefore(h,anchor);
+  else {const first=direct(m,'note')[0]||null;if(start){const forward=elem(d,'forward'),backup=elem(d,'backup');forward.append(elem(d,'duration',Math.round(start*divisions)));backup.append(elem(d,'duration',Math.round(start*divisions)));m.insertBefore(forward,first);m.insertBefore(h,first);m.insertBefore(backup,first);}else m.insertBefore(h,first);}
+
 }
 export function addPart(doc,id,name){const d=elem(doc,'score-part');d.id=id;d.append(elem(doc,'part-name',name));direct(doc.documentElement,'part-list')[0].append(d);const p=elem(doc,'part');p.id=id;doc.documentElement.append(p);return p;}
 export function noteXML(d,m,duration,divisions,root,mode){const n=elem(d,'note');if(m===null)n.append(elem(d,'rest'));else writePitch(n,scaleSpell(m,root,mode));n.append(elem(d,'duration',Math.round(duration*divisions)));const values=[[4,'whole'],[3,'half'],[2,'half'],[1.5,'quarter'],[1,'quarter'],[.75,'eighth'],[.5,'eighth'],[.375,'16th'],[.25,'16th'],[.1875,'32nd'],[.125,'32nd'],[.0625,'64th']];const found=values.find(([q])=>Math.abs(duration-q)<.001);if(found){n.append(elem(d,'type',found[1]));if([3,1.5,.75,.375,.1875].includes(duration))n.append(elem(d,'dot'));}return n;}
-export function fromDraft(draft,{title='Scanned tune',fifths=0,beats=4,beatType=4,clef='treble'}={}){const d=new DOMParser().parseFromString('<score-partwise version="4.0"><work><work-title/></work><part-list><score-part id="P1"><part-name>Melody</part-name></score-part></part-list><part id="P1"/></score-partwise>','application/xml');set(d.getElementsByTagName('work')[0],'work-title',title);const part=direct(d.documentElement,'part')[0];draft.forEach((notes,i)=>{const m=elem(d,'measure');m.setAttribute('number',i+1);if(i===0){const a=elem(d,'attributes');a.append(elem(d,'divisions',480));const key=elem(d,'key');key.append(elem(d,'fifths',fifths));const time=elem(d,'time');time.append(elem(d,'beats',beats),elem(d,'beat-type',beatType));const c=elem(d,'clef');c.append(elem(d,'sign',clef==='alto'?'C':'G'),elem(d,'line',clef==='alto'?3:2));a.append(key,time,c);m.append(a);}for(const note of notes){const n=noteXML(d,note.midi,note.duration,480,'C','major');if(note.pitch)writePitch(n,note.pitch);if(note.review){n.setAttribute('data-review',note.review);n.setAttribute('color','#A76510');}m.append(n);}part.append(m);});return d;}
+export function fromDraft(draft,{title='Scanned tune',fifths=0,beats=4,beatType=4,clef='treble',mode='major'}={}){const d=new DOMParser().parseFromString('<score-partwise version="4.0"><work><work-title/></work><part-list><score-part id="P1"><part-name>Melody</part-name></score-part></part-list><part id="P1"/></score-partwise>','application/xml');set(d.getElementsByTagName('work')[0],'work-title',title);const part=direct(d.documentElement,'part')[0];draft.forEach((notes,i)=>{const m=elem(d,'measure');m.setAttribute('number',i+1);if(i===0){const a=elem(d,'attributes');a.append(elem(d,'divisions',480));const key=elem(d,'key');key.append(elem(d,'fifths',fifths),elem(d,'mode',mode));const time=elem(d,'time');time.append(elem(d,'beats',beats),elem(d,'beat-type',beatType));const c=elem(d,'clef');c.append(elem(d,'sign',clef==='alto'?'C':'G'),elem(d,'line',clef==='alto'?3:2));a.append(key,time,c);m.append(a);}for(const note of notes){const n=noteXML(d,note.midi,note.duration,480,'C','major');if(note.pitch)writePitch(n,note.pitch);if(note.review){n.setAttribute('data-review',note.review);n.setAttribute('color','#A76510');}if(note.originalPitch){n.setAttribute('data-scan-original',JSON.stringify(note.originalPitch));n.setAttribute('data-context-reason',note.contextReason||'Context suggestion');}m.append(n);}part.append(m);});return d;}
 export function demo(){const phrases=[[74,78,81,78,76,74],[76,78,79,81,79,76],[74,78,81,83,81,78],[76,74,73,74,74,74],[81,83,81,78,81,78],[79,81,79,76,79,76],[78,79,81,83,81,78],[76,74,73,74,74,74]];const d=fromDraft(phrases.map(p=>p.map(m=>({midi:m-12,duration:.5}))),{title:'A little session tune',fifths:2,beats:6,beatType:8});d.getElementsByTagName('creator');return d;}

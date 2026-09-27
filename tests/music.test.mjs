@@ -73,3 +73,78 @@ test('print lines end on major repeats and do not change source notation',()=>{
   const before=M.serialize(doc),printed=printScore(doc),starts=M.measures(printed,'P1').filter(m=>M.direct(m.el,'print').length).map(m=>m.index);
   assert.deepEqual(starts,[3,7]);assert.equal(M.serialize(doc),before);
 });
+
+import * as P from '../src/chord-plan.js';
+import * as E from '../src/editing.js';
+import * as R from '../src/ranges.js';
+import {contextualizeDraft} from '../src/scan-context.js';
+test('chord timing supports simple/compound meters and two-bar phrases',()=>{
+  const simple=M.measures(tune([[62,66,69,62],[64,67,71,64]]),'P1');
+  assert.deepEqual(P.changeStarts(simple[0],'pulse'),[0,1,2,3]);assert.deepEqual(P.changeStarts(simple[0],'half'),[0,2]);
+  const compound=M.measures(M.demo(),'P1');assert.deepEqual(P.changeStarts(compound[0],'pulse'),[0,1.5]);assert.deepEqual(P.changeStarts(compound[0],'half'),[0,1.5]);
+  const paired=P.suggestChordPlan(simple,{...settings,chordFrequency:'two-bars'});assert.equal(paired[0][0].name,paired[1][0].name);assert.equal(paired[1][0].show,false);
+  barline(simple[0].el,'backward');const separate=P.suggestChordPlan(simple,{...settings,chordFrequency:'two-bars'});assert.equal(separate[1][0].show,true);
+});
+test('chord complexity and within-bar edits survive notation and playback',()=>{
+  const doc=tune([[62,66,69,73]]),m=M.measures(doc,'P1')[0];
+  const simple=A.chordCandidates(m,'D','major','simple'),color=A.chordCandidates(m,'D','major','colorful');
+  assert.ok(simple.every(c=>['D','G','A'].includes(c.name)));assert.ok(color.some(c=>c.name==='Dmaj7'));
+  const config={...settings,harmony:'off',drone:'off',chordFrequency:'half'},manual={0:{0:'D',2:'A7'}},plan=P.suggestChordPlan([m],config,manual),arr=A.arrange(doc,'P1',config,plan,manual);
+  assert.deepEqual(M.harmonyEvents(M.measures(arr,'P1')[0]).map(c=>[c.start,c.name]),[[0,'D'],[2,'A7']]);
+  const events=playbackEvents(arr,60,{chords:1},plan,false).events;assert.equal(events.filter(e=>e.start>=2&&e.start<2.1).length,5);
+  // Editing only a later imported change leaves the first slash chord intact.
+  const imported=tune([[62,66,69,73]]),im=M.measures(imported,'P1')[0];M.addChord(im.el,'D/F#');M.addChord(im.el,'A',2,im.divisions);
+  const p2=P.suggestChordPlan(M.measures(imported,'P1'),config,{0:{2:'Bm'}}),a2=A.arrange(imported,'P1',config,p2,{0:{2:'Bm'}});
+  assert.deepEqual(M.harmonyEvents(M.measures(a2,'P1')[0]).map(c=>[c.start,c.name]),[[0,'D/F#'],[2,'Bm']]);
+});
+test('moving drones have increasing activity, varied pitches, and exact meter lengths',()=>{
+  const doc=tune([[74,78,81,78],[76,79,83,79]]),ms=M.measures(doc,'P1'),counts=[];
+  for(const motion of ['gentle','flowing','walking']){
+    const config={...settings,harmony:'off',drone:'moving',droneMotion:motion,chordFrequency:'half'},plan=P.suggestChordPlan(ms,config),arr=A.arrange(doc,'P1',config,plan);
+    const drone=M.measures(arr,'VD');assert.deepEqual(drone.map(m=>m.duration),[4,4]);
+    const pitches=drone.flatMap(m=>m.notes.map(n=>n.midi)).filter(n=>n!==null);assert.ok(new Set(pitches).size>1);assert.ok(pitches.every(n=>n>=48&&n<=67));counts.push(drone[0].notes.length);
+    const jig=A.arrange(M.demo(),'P1',config,{});assert.ok(M.measures(jig,'VD').every(m=>m.duration===3));
+  }assert.ok(counts[0]<=counts[1]&&counts[1]<counts[2]);
+});
+test('fiddle and viola harmonies are independent editable staves with separate audio levels',()=>{
+  const doc=tune([[69,73,76,73]]),before=M.serialize(doc),arr=A.arrange(doc,'P1',{...settings,drone:'off',fiddleHarmony:'smooth'},{0:'A'});
+  assert.deepEqual(M.parts(arr).map(p=>p.id),['P1','VH','VF']);
+  assert.equal(M.txt(M.measures(arr,'VF')[0].el,'sign'),'G');assert.equal(M.txt(M.measures(arr,'VH')[0].el,'sign'),'C');
+  const lead=M.measures(arr,'P1')[0].notes;assert.ok(M.measures(arr,'VF')[0].notes.every((n,i)=>n.midi>lead[i].midi&&n.midi<=93));
+  const sound=playbackEvents(arr,60,{melody:0,harmony:0,fiddle:1,drone:0,chords:0},{},false);assert.equal(sound.events.length,4);assert.equal(M.serialize(doc),before);
+});
+test('pitch editing respects the displayed key, octaves, transposition, and tied chains',()=>{
+  const doc=tune([[64],[64]]),ms=M.measures(doc,'P1'),n=ms[0].notes[0].el;
+  assert.deepEqual(E.shiftedPitch(n,1,{fifths:2}),{step:'F',alter:1,octave:4});assert.equal(E.shiftedPitch(n,1,{chromatic:true}).alter,0);assert.equal(E.shiftedPitch(n,-1,{octave:true}).octave,3);
+  const displayed={step:'G',alter:1,octave:5};assert.deepEqual(E.sourcePitch(displayed,2,1,2),{step:'F',alter:1,octave:4});
+  for(const [i,type] of [[0,'start'],[1,'stop']]){const tie=M.elem(doc,'tie');tie.setAttribute('type',type);ms[i].notes[0].el.append(tie);}
+  assert.equal(E.editPitch(doc,'P1',1,0,{step:'F',alter:1,octave:4}).length,2);assert.deepEqual(M.measures(doc,'P1').map(m=>m.notes[0].midi),[66,66]);
+  E.editPitch(doc,'P1',0,0,null);assert.ok(M.measures(doc,'P1').every(m=>m.notes[0].midi===null&&M.direct(m.notes[0].el,'tie').length===0));
+});
+test('generated pitch overrides persist on matching rhythms and title edits preserve source metadata',()=>{
+  const doc=tune([[62,66,69,62]]),arr=A.arrange(doc,'P1',settings,{0:'D'}),n=M.measures(arr,'VH')[0].notes[0];
+  const edits={[E.editKey('VH',0,0)]:{start:n.start,duration:n.duration,pitch:{step:'C',alter:0,octave:4}}};E.applyGeneratedEdits(arr,edits);assert.equal(M.measures(arr,'VH')[0].notes[0].midi,60);
+  E.setScoreTitle(doc,'  The   Blue\nReel!  ');assert.equal(M.metadata(doc,'P1').title,'The Blue Reel!');assert.equal(M.metadata(printScore(doc),'P1').title,'The Blue Reel!');
+});
+test('uncertain scans use repeated musical context without changing confident chromatic notes',()=>{
+  const draft=[[62,66,69,66],[62,65,69,66]].map(bar=>bar.map(midi=>({midi,duration:1,pitch:M.pitch(midi)})));draft[1][1].review='uncertain head';
+  const original=JSON.stringify(draft),result=contextualizeDraft(draft,{root:'D',mode:'major'});
+  assert.equal(result.draft[1][1].midi,66);assert.equal(result.draft[1][1].originalPitch.step,'F');assert.equal(result.draft[1][1].originalPitch.alter,0);assert.ok(result.draft[1][1].review.includes('Context suggestion'));assert.equal(JSON.stringify(draft),original);
+  delete draft[1][1].review;assert.equal(contextualizeDraft(draft,{root:'D',mode:'major'}).draft[1][1].midi,65);
+  const isolated=[[{midi:65,duration:1,review:'uncertain'}]];assert.equal(contextualizeDraft(isolated).draft[0][0].midi,65);
+});
+test('range guides mark standard-tuning lows and configurable highs with safe octave alternatives',()=>{
+  const viola=R.rangeProfile('viola'),fiddle=R.rangeProfile('fiddle');assert.equal(R.rangeIssue(48,viola),null);assert.equal(R.rangeIssue(55,fiddle),null);
+  for(const [midi,profile,kind] of [[47,viola,'low'],[54,fiddle,'low'],[89,fiddle,'high'],[82,viola,'high']]){const issue=R.rangeIssue(midi,profile);assert.equal(issue.kind,kind);assert.ok(issue.alternatives.length);assert.ok(issue.alternatives.every(a=>a.midi%12===midi%12&&a.midi>=profile.minimum&&a.midi<=profile.maximum));}
+  assert.equal(R.rangeIssue(80,R.rangeProfile('viola','extended')),null);assert.equal(R.rangeIssue(80,R.rangeProfile('viola','first')).kind,'high');assert.equal(R.rangeIssue(null,viola),null);
+  const original=tune([[50,54,57,50]]),shifted=M.makeMelody(original,'P1',{clef:'treble',octave:-1,semitones:0});assert.equal(R.scoreRangeIssues(shifted,'P1',{clef:'treble'}).length,4);
+});
+test('chord changes during held notes keep timing without altering melody duration',()=>{
+  const doc=M.fromDraft([[{midi:62,duration:4}]],{beats:4,beatType:4}),m=M.measures(doc,'P1')[0];M.addChord(m.el,'D');M.addChord(m.el,'A7',2,m.divisions);
+  assert.deepEqual(M.harmonyEvents(M.measures(doc,'P1')[0]).map(c=>[c.start,c.name]),[[0,'D'],[2,'A7']]);assert.equal(M.measures(doc,'P1')[0].duration,4);assert.equal(M.measures(doc,'P1')[0].notes.length,1);
+});
+test('generated smooth harmony sustains one pitch through tied chord changes',()=>{
+  const doc=tune([[74],[74]]),ms=M.measures(doc,'P1');for(const [i,type]of [[0,'start'],[1,'stop']]){const tie=M.elem(doc,'tie');tie.setAttribute('type',type);ms[i].notes[0].el.append(tie);}
+  const arr=A.arrange(doc,'P1',{...settings,drone:'off',fiddleHarmony:'smooth'},{0:'D',1:'G'});
+  for(const id of ['VH','VF']){const notes=M.measures(arr,id).map(m=>m.notes[0]);assert.equal(notes[0].midi,notes[1].midi);}
+});
