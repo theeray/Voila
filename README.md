@@ -83,3 +83,13 @@ and standard instrument low limits. Double bass uses written pitches an octave
 above sounding pitch with MusicXML `transpose/octave-change = -1`. Audio previews
 apply that transposition; range warnings use written pitches (four-string bass,
 no low-C extension). Source/session transfers preserve these independent options.
+
+## Scan review and sets of tunes
+
+The scanner defaults to automatic clef, key-signature, meter, printed-chord, repeat/ending, and title detection. Oemer supplies notehead segmentation, Tesseract reads text locally, and Bravura bitmap templates plus staff geometry recognize basic musical symbols. A local text pass targets isolated chord symbols. Clear printed melody staves are the intended input; handwriting, simultaneous instrumental staves, ties, tuplets, and ornaments still need correction. This is experimental OMR, not a PlayScore-equivalent engine.
+
+PDFs can be scanned in reading order across all pages. Review each staff before import: a nonempty tune name starts a named section, while a blank name continues the preceding tune. Each section retains its local key/mode and meter in MusicXML, printing, playback, and accompaniment generation. Mode is reviewed separately because a key signature alone does not identify it. Pages with no detectable melody can be skipped during whole-PDF recognition.
+
+The Measure workshop now includes local signature, tune-name, repeat, numbered-ending, and instruction controls. Manual chords can be entered without enabling automatic guitar suggestions. Printed chord symbols remain distinct from generated suggestions. Basic repeats play back; D.C./D.S. words are retained as text only. Changes in rhythm are flagged rather than silently stretched to fit a meter.
+
+`prepare-model` installs both the existing note model and locally served text OCR assets. The text model is checksum-verified. Bravura template licensing is included in `public/models/BRAVURA-LICENSE.txt`; the text engine's license is copied with its assets.
