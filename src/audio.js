@@ -15,7 +15,7 @@ export function playbackEvents(doc,tempo,volumes,chords,repeat=true,startAt=null
     }
   }
   const beat=60/tempo,markers=[],events=[];let duration=0;
-  for(const mi of order){markers.push({time:duration,index:mi});duration+=mel[mi].duration*beat;}
+  for(const mi of order){markers.push({time:duration,index:mi,offset:0,duration:mel[mi].duration*beat});duration+=mel[mi].duration*beat;}
   if(duration>600)throw Error('Please use a selection of ten minutes or less for the audio preview.');
   for(const part of ps){
     const ms=measures(doc,part.id),volume=part.id===ps[0].id?volumes.melody:part.name.toLowerCase().includes('drone')?volumes.drone:part.name.toLowerCase().includes('fiddle')?(volumes.fiddle??volumes.harmony):volumes.harmony;
@@ -52,10 +52,17 @@ export function playbackEvents(doc,tempo,volumes,chords,repeat=true,startAt=null
       const cut=markers[index].time+offset*beat;
       // Retrigger any held harmony/drone/chord at the new start, with only its
       // remaining duration. This also handles starting inside a tied note.
-      return {events:events.filter(e=>e.start+e.duration>cut+.000001).map(e=>({...e,start:Math.max(0,e.start-cut),duration:e.start+e.duration-Math.max(e.start,cut)})),markers:markers.slice(index).map(m=>({...m,time:Math.max(0,m.time-cut)})),duration:Math.max(0,duration-cut)};
+      return {events:events.filter(e=>e.start+e.duration>cut+.000001).map(e=>({...e,start:Math.max(0,e.start-cut),duration:e.start+e.duration-Math.max(e.start,cut)})),markers:markers.slice(index).map((m,i)=>({...m,time:Math.max(0,m.time-cut),offset:i===0?offset:0})),beat,duration:Math.max(0,duration-cut)};
     }
   }
-  return {events,markers,duration};
+  return {events,markers,beat,duration};
+}
+
+export function playbackPosition(sequence,time){
+  let marker;
+  for(const item of sequence.markers){if(item.time>time)break;marker=item;}
+  if(!marker)return null;
+  return {measure:marker.index,offset:Math.min(marker.duration/sequence.beat,(marker.offset||0)+Math.max(0,time-marker.time)/sequence.beat)};
 }
 
 export function guitarVoicing(chord,previous=[]){
@@ -96,7 +103,7 @@ export function synthesizeWave(sequence,sampleRate=22050){
 
 export class Player{
   constructor(){this.audio=null;this.url=null;this.playing=false;this.timer=null;this.generation=0;}
-  stop(){this.generation++;if(this.audio){this.audio.pause();this.audio.currentTime=0;}clearInterval(this.timer);this.playing=false;this.onStop?.();}
+  stop(){this.generation++;if(this.audio){this.audio.pause();this.audio.currentTime=0;}clearInterval(this.timer);if(this.frame)cancelAnimationFrame(this.frame);this.frame=null;this.playing=false;this.onStop?.();}
   play(doc,tempo,volumes,chords,onMeasure,repeat=true,startAt=null){
     const sequence=playbackEvents(doc,tempo,volumes,chords,repeat,startAt);
     if(!sequence.events.length){this.stop();throw Error('There are no audible notes. Turn up a part in the mixer.');}
@@ -124,6 +131,13 @@ export class Player{
     if(generation!==this.generation)return false;
     if(!audition){
       onMeasure?.(sequence.markers[0]?.index);
+      const tick=()=>{
+        if(generation!==this.generation||!this.playing)return;
+        const position=playbackPosition(sequence,this.audio.currentTime);
+        if(position)this.onPosition?.(position);
+        this.frame=requestAnimationFrame(tick);
+      };
+      tick();
       this.timer=setInterval(()=>{let active;for(const marker of sequence.markers){if(marker.time>this.audio.currentTime)break;active=marker;}if(active)onMeasure?.(active.index);},100);
     }
     return true;

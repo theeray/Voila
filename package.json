@@ -13,9 +13,11 @@
   },
   "dependencies": {
     "fflate": "^0.8.2",
+    "jspdf": "^4.2.1",
     "onnxruntime-web": "^1.20.1",
     "opensheetmusicdisplay": "^1.9.2",
-    "pdfjs-dist": "^4.10.38"
+    "pdfjs-dist": "^4.10.38",
+    "svg2pdf.js": "^2.8.1"
   },
   "devDependencies": {
     "@xmldom/xmldom": "^0.8.10",

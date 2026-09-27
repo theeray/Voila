@@ -56,3 +56,20 @@ Voilà! is independent of PlayScore and MuseScore. Their proprietary recognition
 ## Validation
 
 `npm test` covers exact pitch transposition, modal chord choices, preservation of imported chord changes, slash basses, harmony range and chord tones, drone rhythm/ties/clashes, repeat ending spans, PCM audio, print line breaks, image preprocessing, chord timelines/complexity, moving-drone activity, separate fiddle harmony, tied pitch editing, displayed/source transposition, contextual ambiguity resolution, and instrument-range alternatives. OCR recognition still needs validation against a broad real-world sheet-music set; the included checks are not an accuracy benchmark.
+
+### Oxbows Songbook integration
+
+Send to Songbook opens the linked app and transfers a MusicXML arrangement, its
+full original source and editing settings, and a vector landscape PDF. Songbook
+ships this same editor locally, so editing and synthesized playback do not need
+an authenticated iframe from the private Voilà! site. Imported PDFs open the
+experimental scanner. Choose the page, printed clef, key, and meter before scanning.
+
+Transfers use a random nonce and verify both the exact window and origin. Scores
+are never put into a URL or sent to a server. If a browser blocks the popup or a
+sign-in redirect disconnects it, Export → Download transfer file creates a
+`.voila` file that either app can import. Plain MusicXML remains supported.
+
+The thin blue locator follows HTML audio media time, interpolates between
+engraved note positions, and returns to the selected note after stopping. Repeat
+jumps and playback beginning partway through a measure use the same audio timeline.

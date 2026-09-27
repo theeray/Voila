@@ -37,3 +37,7 @@
 .note-chip.range-high{border-color:#38A9D6;background:#ECF8FD}.note-chip.range-high strong{color:#147FA9}.note-chip.range-low{border-color:#C75462;background:#FFF1F3}.note-chip.range-low strong{color:#A63647}
 .range-review{padding:14px;margin:14px 0;border-left:3px solid #38A9D6;background:#ECF8FD;border-radius:4px}.range-review[data-kind=low]{border-color:#C75462;background:#FFF1F3}.range-review p{margin:0 0 10px;line-height:1.6}.range-review .hint{margin:10px 0 0}.range-review button{margin:0 8px 4px 0}
 @media(max-width:650px){.range-legend #rangeSummary{width:100%;margin:0}.range-legend{gap:8px 12px}}
+.top-actions{flex-wrap:wrap}.top-actions button[hidden]{display:none!important}.songbook-editor .topbar{position:static}.songbook-editor .tagline{font-size:11px}.songbook-editor .top-actions{margin-left:auto}@media(max-width:700px){.top-actions{gap:6px}.top-actions .button{font-size:12px;padding:9px}.topbar{flex-wrap:wrap}.topbar .tagline{display:none}}
+#notation{position:relative}.score-locator{position:absolute;left:0;top:0;width:2px;background:#38a9d6;box-shadow:0 0 0 1px #ffffffaa;pointer-events:none;z-index:5;will-change:transform}.score-locator[hidden]{display:none}.score-locator.playing{background:#147fa9}.sounding-score-note{filter:drop-shadow(0 0 2px #38a9d6)}@media print{.score-locator{display:none!important}}
+
+.download-ready{display:block;margin:12px 0;padding:12px 16px;background:#e3f5fc;border:1px solid #85bfd6;border-radius:8px;color:#125779;font:600 14px system-ui;text-decoration:underline;overflow-wrap:anywhere}
