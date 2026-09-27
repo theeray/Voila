@@ -73,3 +73,13 @@ sign-in redirect disconnects it, Export → Download transfer file creates a
 The thin blue locator follows HTML audio media time, interpolates between
 engraved note positions, and returns to the selected note after stopping. Repeat
 jumps and playback beginning partway through a measure use the same audio timeline.
+
+### Low string parts
+
+Cello and double bass can each be off, sustained, a root/fifth pulse, or a moving
+chord-tone line. Both receive independent bass-clef staves and mixer controls.
+Generation observes chord-change timing, pickups, changing meter, melody rests,
+and standard instrument low limits. Double bass uses written pitches an octave
+above sounding pitch with MusicXML `transpose/octave-change = -1`. Audio previews
+apply that transposition; range warnings use written pitches (four-string bass,
+no low-C extension). Source/session transfers preserve these independent options.
