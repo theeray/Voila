@@ -1,6 +1,6 @@
 import {measures,parts,parseChord,harmonyEvents} from './music.js';
 
-export function playbackEvents(doc,tempo,volumes,chords,repeat=true){
+export function playbackEvents(doc,tempo,volumes,chords,repeat=true,startAt=null){
   const ps=parts(doc),mel=measures(doc,ps[0].id);
   const order=[];let startRepeat=0,activeEnding=null;const endings=mel.map(m=>{const signs=Array.from(m.el.getElementsByTagName('ending'));for(const e of signs)if(e.getAttribute('type')==='start')activeEnding=e.getAttribute('number').split(/[, ]+/).map(Number);const here=activeEnding;if(signs.some(e=>['stop','discontinue'].includes(e.getAttribute('type'))))activeEnding=null;return here;});
   for(let i=0;i<mel.length;i++){
@@ -45,6 +45,16 @@ export function playbackEvents(doc,tempo,volumes,chords,repeat=true){
     }
     offset+=mel[mi].duration*beat;
   }
+  if(startAt){
+    const index=markers.findIndex(m=>m.index===startAt.measure);
+    if(index>=0){
+      const offset=Math.max(0,Math.min(Number(startAt.offset)||0,mel[startAt.measure].duration));
+      const cut=markers[index].time+offset*beat;
+      // Retrigger any held harmony/drone/chord at the new start, with only its
+      // remaining duration. This also handles starting inside a tied note.
+      return {events:events.filter(e=>e.start+e.duration>cut+.000001).map(e=>({...e,start:Math.max(0,e.start-cut),duration:e.start+e.duration-Math.max(e.start,cut)})),markers:markers.slice(index).map(m=>({...m,time:Math.max(0,m.time-cut)})),duration:Math.max(0,duration-cut)};
+    }
+  }
   return {events,markers,duration};
 }
 
@@ -87,20 +97,35 @@ export function synthesizeWave(sequence,sampleRate=22050){
 export class Player{
   constructor(){this.audio=null;this.url=null;this.playing=false;this.timer=null;this.generation=0;}
   stop(){this.generation++;if(this.audio){this.audio.pause();this.audio.currentTime=0;}clearInterval(this.timer);this.playing=false;this.onStop?.();}
-  async play(doc,tempo,volumes,chords,onMeasure,repeat=true){
+  play(doc,tempo,volumes,chords,onMeasure,repeat=true,startAt=null){
+    const sequence=playbackEvents(doc,tempo,volumes,chords,repeat,startAt);
+    if(!sequence.events.length){this.stop();throw Error('There are no audible notes. Turn up a part in the mixer.');}
+    return this.startSequence(sequence,onMeasure,false);
+  }
+  audition(midi){
+    if(midi===null||!Number.isFinite(midi)){this.stop();return Promise.resolve(false);}
+    return this.startSequence({events:[{midi,start:0,duration:.45,volume:.65,type:'strings'}],markers:[],duration:.45},null,true);
+  }
+  async startSequence(sequence,onMeasure,audition){
     this.stop();const generation=this.generation;
     try{if(navigator.audioSession)navigator.audioSession.type='playback';}catch{}
-    const sequence=playbackEvents(doc,tempo,volumes,chords,repeat);
-    if(!sequence.events.length)throw Error('There are no audible notes. Turn up a part in the mixer.');
-    if(!this.audio){this.audio=document.createElement('audio');this.audio.preload='auto';this.audio.setAttribute('playsinline','');this.audio.hidden=true;document.body.appendChild(this.audio);this.audio.onended=()=>this.stop();}
+    if(!this.audio){this.audio=document.createElement('audio');this.audio.preload='auto';this.audio.setAttribute('playsinline','');this.audio.hidden=true;document.body.appendChild(this.audio);}
+    this.audio.onended=()=>{if(generation===this.generation)this.stop();};
     if(this.url)URL.revokeObjectURL(this.url);
     this.url=URL.createObjectURL(new Blob([synthesizeWave(sequence)],{type:'audio/wav'}));
     this.audio.src=this.url;this.audio.muted=false;this.audio.volume=1;
     // Keep play() in the originating button gesture: no awaits before this call.
-    const started=this.audio.play();
-    try{await started;}catch(error){throw Error('Audio could not start. Tap Play again and check your phone’s media volume or connected Bluetooth speaker.');}
+    this.playing=!audition;
+    try{await this.audio.play();}catch(error){
+      // Rapid clicks/arrow presses deliberately interrupt earlier previews.
+      if(generation!==this.generation)return false;
+      this.stop();throw Error(audition?'Note preview could not start. Tap the note again and check your device’s media volume.':'Audio could not start. Tap Play again and check your phone’s media volume or connected Bluetooth speaker.');
+    }
     if(generation!==this.generation)return false;
-    this.playing=true;
-    this.timer=setInterval(()=>{let active;for(const marker of sequence.markers){if(marker.time>this.audio.currentTime)break;active=marker;}if(active)onMeasure(active.index);},100);return true;
+    if(!audition){
+      onMeasure?.(sequence.markers[0]?.index);
+      this.timer=setInterval(()=>{let active;for(const marker of sequence.markers){if(marker.time>this.audio.currentTime)break;active=marker;}if(active)onMeasure?.(active.index);},100);
+    }
+    return true;
   }
 }

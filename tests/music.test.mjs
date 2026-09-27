@@ -148,3 +148,19 @@ test('generated smooth harmony sustains one pitch through tied chord changes',()
   const arr=A.arrange(doc,'P1',{...settings,drone:'off',fiddleHarmony:'smooth'},{0:'D',1:'G'});
   for(const id of ['VH','VF']){const notes=M.measures(arr,id).map(m=>m.notes[0]);assert.equal(notes[0].midi,notes[1].midi);}
 });
+test('playback starts at a clicked beat and synchronizes held drones and chords',()=>{
+  const doc=tune([[60,64,67,60],[62,65,69,62]]),arr=A.arrange(doc,'P1',{...settings,root:'C',harmony:'off',drone:'tonic'},{0:'C',1:'Dm'});
+  const cropped=playbackEvents(arr,60,{melody:1,drone:1,chords:1},{0:'C',1:'Dm'},false,{measure:1,offset:2});
+  assert.equal(cropped.duration,2);assert.deepEqual(cropped.markers,[{time:0,index:1}]);
+  assert.deepEqual(cropped.events.filter(e=>e.type==='strings').map(e=>[e.midi,e.start,e.duration]),[[69,0,1],[62,1,1]]);
+  assert.ok(cropped.events.some(e=>e.type==='sine'&&e.start===0&&e.duration===2));
+  assert.ok(cropped.events.filter(e=>e.type==='pluck').every(e=>e.start===0&&e.duration===2));
+});
+test('selected-note playback resumes tied notes and preserves subsequent repeats',()=>{
+  const doc=tune([[60],[60],[64]]),ms=M.measures(doc,'P1');
+  for(const [i,type]of [[0,'start'],[1,'stop']]){const tie=M.elem(doc,'tie');tie.setAttribute('type',type);ms[i].notes[0].el.append(tie);}
+  barline(ms[0].el,'forward');barline(ms[2].el,'backward');
+  const seq=playbackEvents(doc,120,{melody:1},{},true,{measure:1,offset:0});
+  assert.deepEqual(seq.markers.map(m=>m.index),[1,2,0,1,2]);assert.equal(seq.events[0].midi,60);assert.equal(seq.events[0].start,0);assert.equal(seq.events[0].duration,.5);
+  assert.equal(playbackEvents(doc,120,{melody:1},{},true,{measure:99,offset:0}).duration,3);
+});
